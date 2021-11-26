@@ -121,7 +121,8 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
         dcc.Dropdown(
             id='graph2_state',
             options=[{'label': i, 'value': i} for i in states],
-            value='Select State'
+            value='',
+            placeholder="Select State",
         ),
         html.Br(),
         dcc.RadioItems(
@@ -140,7 +141,8 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
         dcc.Dropdown(
             id='graph2_county',
             options=[{'label': i, 'value': i} for i in sorted(county['Recip_County'].unique())],
-            value='Select County'
+            value='',
+            placeholder="Select County",
         ),
     ], style={'width': '20%', 'float': 'right', 'display': 'inline-block', 'padding-right': '25%'}),
 
