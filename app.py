@@ -29,8 +29,16 @@ g1_slider_masks = jurisdiction['Date'].unique()
 g2_slider_masks = county['Date'].unique()
 g3_slider_masks = transmission['report_date'].unique()
 states = sorted(jurisdiction['Location'].unique())
+jurisdiction['Series_Complete_Pop_Pct'] = pd.to_numeric(jurisdiction['Series_Complete_Pop_Pct'], errors='coerce')
+jurisdiction['Administered_Dose1_Pop_Pct'] = pd.to_numeric(jurisdiction['Administered_Dose1_Pop_Pct'], errors='coerce')
+county['Series_Complete_Pop_Pct'] = pd.to_numeric(county['Series_Complete_Pop_Pct'], errors='coerce')
+county['Administered_Dose1_Pop_Pct'] = pd.to_numeric(county['Administered_Dose1_Pop_Pct'], errors='coerce')
 transmission['state_name'] = transmission['state_name'].map(us_state_to_abbrev)
 transmission['report_date'] = pd.to_datetime(transmission['report_date'])
+transmission['percent_test_results_reported_positive_last_7_days'] \
+    = pd.to_numeric(transmission['percent_test_results_reported_positive_last_7_days'], errors='coerce')
+transmission['cases_per_100K_7_day_count_change'] \
+    = pd.to_numeric(transmission['cases_per_100K_7_day_count_change'], errors='coerce')
 
 idx = jurisdiction['Date'] == g1_slider_masks[0]
 
@@ -63,10 +71,15 @@ fig2.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
 ## graph3
 idx3 = (transmission['state_name'] == 'IL') & (transmission['county_name'] == 'Mercer County') & (transmission['report_date'] <= g3_slider_masks[0]) & (transmission['report_date'] >= g3_slider_masks[6])
 
-fig3 = px.line(transmission[idx3], x='report_date', y="percent_test_results_reported_positive_last_7_days")
+fig3 = px.line(transmission[idx3].sort_values(['report_date']), x='report_date', y="percent_test_results_reported_positive_last_7_days")
 fig3.update_layout(xaxis={'showgrid': False, 'title':''},
                    yaxis={'showgrid': False, 'title':''},
                    title_text="Daily % Positivity - 7-Day Moving Average ")
+
+fig4 = px.line(transmission[idx3].sort_values(['report_date']), x='report_date', y="cases_per_100K_7_day_count_change")
+fig4.update_layout(xaxis={'showgrid': False, 'title':''},
+                   yaxis={'showgrid': False, 'title':''},
+                   title_text="Daily Cases - 7-Day Moving Average ")
 
 
 # web layout
@@ -186,6 +199,11 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             figure=fig3
         ),
 
+        dcc.Graph(
+            id='graph4',
+            figure=fig4
+        ),
+
     ], style={'width': '40%', 'float': 'right', 'display': 'inline-block', 'padding-right': '10%'}),
 
 ])
@@ -250,8 +268,19 @@ def update_graph2(selected_state, selected_criteria, selected_date):
 
     return fig2
 
+# @app.callback(
+#     Output('graph3_date_range', 'masks'),
+#     Input('graph2_state', 'value'),
+#     Input('graph2_county', 'value'))
+# def update_slider(selected_state, selected_county):
+#     slider_idx = (transmission['state_name'] == selected_state) & (transmission['county_name'] == selected_county)
+#     g3_slider_masks = sorted(transmission.loc[slider_idx, 'report_date'])
+#     g3_slider_masks = [d.strftime('%m/%d/%Y') for d in g3_slider_masks]
+#     return [{i: '{}'.format(g3_slider_masks[i]) for i in range(len(g3_slider_masks))}]
+
 @app.callback(
     Output('graph3', 'figure'),
+    Output('graph4', 'figure'),
     Input('graph2_state', 'value'),
     Input('graph2_county', 'value'),
     Input('graph3_date_range', 'value'))
@@ -261,11 +290,18 @@ def update_graph3(selected_state, selected_county, selected_date_range):
            & (transmission['report_date'] <= g3_slider_masks[selected_date_range[1]]) \
            & (transmission['report_date'] >= g3_slider_masks[selected_date_range[0]])
 
-    fig3 = px.line(transmission[idx3].sort_values(['report_date']), x='report_date', y="percent_test_results_reported_positive_last_7_days")
+    fig3 = px.line(transmission[idx3].sort_values(['report_date']),
+                   x='report_date', y="percent_test_results_reported_positive_last_7_days")
     fig3.update_layout(xaxis={'showgrid': False, 'title': ''},
                        yaxis={'showgrid': False, 'title': ''},
                        title_text="Daily % Positivity - 7-Day Moving Average ")
-    return fig3
+
+    fig4 = px.line(transmission[idx3].sort_values(['report_date']),
+                   x='report_date', y="cases_per_100K_7_day_count_change")
+    fig4.update_layout(xaxis={'showgrid': False, 'title': ''},
+                       yaxis={'showgrid': False, 'title': ''},
+                       title_text="Daily Cases - 7-Day Moving Average ")
+    return fig3, fig4
 
 
 if __name__ == '__main__':
