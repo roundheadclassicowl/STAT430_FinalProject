@@ -8,6 +8,7 @@ import pandas as pd
 import datetime
 from urllib.request import urlopen
 import json
+from state_abbr import us_state_to_abbrev
 
 with urlopen('https://raw.githubusercontent.com/plotly/datasets/master/geojson-counties-fips.json') as response:
     counties_map = json.load(response)
@@ -26,11 +27,15 @@ transmission = pd.read_csv('data/United_States_COVID-19_County_Level_of_Communit
 # preprocess columns
 g1_slider_masks = jurisdiction['Date'].unique()
 g2_slider_masks = county['Date'].unique()
+g3_slider_masks = transmission['report_date'].unique()
 states = sorted(jurisdiction['Location'].unique())
+transmission['state_name'] = transmission['state_name'].map(us_state_to_abbrev)
+transmission['report_date'] = pd.to_datetime(transmission['report_date'])
 
 idx = jurisdiction['Date'] == g1_slider_masks[0]
 
 # figures and callbacks
+## graph1
 fig = go.Figure(data=go.Choropleth(
     locations=jurisdiction.loc[idx, 'Location'], # Spatial coordinates
     z = jurisdiction.loc[idx, 'Series_Complete_Pop_Pct'].astype(float), # Data to be color-coded
@@ -44,6 +49,7 @@ fig.update_layout(
     geo_scope='usa', # limite map scope to USA
 )
 
+## graph2
 idx2 = (county['Recip_State'] == 'IL') & (county['Date'] == g2_slider_masks[0])
 
 fig2 = px.choropleth(county[idx2], geojson=counties_map, locations='FIPS', color='Series_Complete_Pop_Pct',
@@ -53,6 +59,14 @@ fig2 = px.choropleth(county[idx2], geojson=counties_map, locations='FIPS', color
                           )
 fig2.update_geos(fitbounds="locations", visible=False)
 fig2.update_layout(margin={"r":0,"t":0,"l":0,"b":0})
+
+## graph3
+idx3 = (transmission['state_name'] == 'IL') & (transmission['county_name'] == 'Mercer County') & (transmission['report_date'] <= g3_slider_masks[0]) & (transmission['report_date'] >= g3_slider_masks[6])
+
+fig3 = px.line(transmission[idx3], x='report_date', y="percent_test_results_reported_positive_last_7_days")
+fig3.update_layout(xaxis={'showgrid': False, 'title':''},
+                   yaxis={'showgrid': False, 'title':''},
+                   title_text="Daily % Positivity - 7-Day Moving Average ")
 
 
 # web layout
@@ -77,7 +91,7 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             id='graph1_radio',
             options=[
                 {'label': 'Fully Vaccinated', 'value': 'FV'},
-                {'label': 'At least 1 dose', 'value': '1dose+'}
+                {'label': 'At Least One Dose', 'value': '1dose+'}
             ],
             value='FV'
         ),
@@ -100,6 +114,8 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
     ], style={'textAlign': 'center', 'padding-left':'25%', 'padding-right':'25%'}),
 
     # separator
+    html.Div(children=[html.Br(),
+                       html.Label(''),], style={'textAlign': 'center'}),
 
     html.Div(children=[
         dcc.Dropdown(
@@ -107,11 +123,12 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             options=[{'label': i, 'value': i} for i in states],
             value='Select State'
         ),
+        html.Br(),
         dcc.RadioItems(
             id='graph2_radio',
             options=[
                 {'label': 'Fully Vaccinated', 'value': 'FV'},
-                {'label': 'At least 1 dose', 'value': '1dose+'}
+                {'label': 'At Least One Dose', 'value': '1dose+'}
             ],
             value='FV',
             labelStyle={'display': 'inline-block'}
@@ -128,6 +145,7 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
     ], style={'width': '20%', 'float': 'right', 'display': 'inline-block', 'padding-right': '25%'}),
 
     html.Div([
+        html.Br(),
         dcc.Graph(
             id='graph2',
             figure=fig2
@@ -141,6 +159,32 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             value=0,
         ),
     ], style={'width': '40%', 'display': 'inline-block', 'padding-left':'10%'}),
+
+    html.Div([
+        html.H2(
+        children='7 Day Moving Averages',
+        style={
+            'textAlign': 'center',
+            'color': colors['text']
+        }),
+
+        html.Div(id='output_container_range_graph3_date_slider'),
+
+        dcc.RangeSlider(
+        id='graph3_date_range',
+        min=0,
+        max=10,
+        step=6,
+        marks={i: '{}'.format(g3_slider_masks[i]) for i in range(len(g3_slider_masks))},
+        value=[0, 6]
+        ),
+
+        dcc.Graph(
+            id='graph3',
+            figure=fig3
+        ),
+
+    ], style={'width': '40%', 'float': 'right', 'display': 'inline-block', 'padding-right': '10%'}),
 
 ])
 
@@ -194,7 +238,6 @@ def update_graph2(selected_state, selected_criteria, selected_date):
     fig2 = px.choropleth(county[idx2], geojson=counties_map, locations='FIPS', color=color,
                          color_continuous_scale="Viridis",
                          range_color=(0, 100),
-                         title = 'County Level',
                          labels={color: 'Vaccine %', 'FIPS': 'Recip_County'}
                          )
     fig2.update_geos(fitbounds="locations", visible=False)
@@ -204,6 +247,23 @@ def update_graph2(selected_state, selected_criteria, selected_date):
                        ))
 
     return fig2
+
+@app.callback(
+    Output('graph3', 'figure'),
+    Input('graph2_state', 'value'),
+    Input('graph2_county', 'value'),
+    Input('graph3_date_range', 'value'))
+def update_graph3(selected_state, selected_county, selected_date_range):
+    print(selected_date_range, g3_slider_masks[selected_date_range[0]], g3_slider_masks[selected_date_range[1]])
+    idx3 = (transmission['state_name'] == selected_state) & (transmission['county_name'] == selected_county) \
+           & (transmission['report_date'] <= g3_slider_masks[selected_date_range[1]]) \
+           & (transmission['report_date'] >= g3_slider_masks[selected_date_range[0]])
+
+    fig3 = px.line(transmission[idx3].sort_values(['report_date']), x='report_date', y="percent_test_results_reported_positive_last_7_days")
+    fig3.update_layout(xaxis={'showgrid': False, 'title': ''},
+                       yaxis={'showgrid': False, 'title': ''},
+                       title_text="Daily % Positivity - 7-Day Moving Average ")
+    return fig3
 
 
 if __name__ == '__main__':
