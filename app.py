@@ -115,13 +115,12 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
         ),
 
         html.Br(),
-        html.Label('For Vaccine Up to Date'),
+        html.Div(id='graph1_date_header'),
         dcc.Slider(
             id='graph1_date',
             min=0,
-            max=7,
-            marks={i: '{}'.format(g1_slider_masks[i]) for i in range(len(g1_slider_masks))},
-            value=0,
+            max=len(g1_slider_masks) - 1,
+            value=len(g1_slider_masks) - 1,
         ),
 
     ], style={'textAlign': 'center', 'padding-left':'25%', 'padding-right':'25%'}),
@@ -166,12 +165,14 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             figure=fig2
         ),
 
+        html.Br(),
+        html.Div(id='graph2_date_header'),
         dcc.Slider(
             id='graph2_date',
             min=0,
-            max=4,
-            marks={i: '{}'.format(g2_slider_masks[i]) for i in range(len(g2_slider_masks))},
-            value=0,
+            max=len(g2_slider_masks) - 1,
+            tooltip={"placement": "bottom", "always_visible": True},
+            value=len(g2_slider_masks) - 1,
         ),
     ], style={'width': '40%', 'display': 'inline-block', 'padding-left':'10%'}),
 
@@ -183,15 +184,24 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
             'color': colors['text']
         }),
 
-        html.Div(id='output_container_range_graph3_date_slider'),
-
+        html.H3(id='output_container_range_graph3_date_slider',
+                style={
+                    'textAlign': 'center',
+                    'color': colors['text'],
+                    'font-weight': 'normal'
+                }),
+        html.Div(children='Use slider to update time series chart',
+                 style={
+                    'textAlign': 'center',
+                    'color': colors['text']
+            }),
         dcc.RangeSlider(
-        id='graph3_date_range',
-        min=0,
-        max=10,
-        step=6,
-        marks={i: '{}'.format(g3_slider_masks[i]) for i in range(len(g3_slider_masks))},
-        value=[0, 6]
+            id='graph3_date_range',
+            min=0,
+            max=len(g3_slider_masks) - 1,
+            value=[len(g3_slider_masks) - 7, len(g3_slider_masks) - 1],
+            pushable=2,
+            updatemode='drag'
         ),
 
         dcc.Graph(
@@ -208,12 +218,19 @@ app.layout = html.Div(style={'backgroundColor': colors['background']}, children=
 
 ])
 
+
+@app.callback(Output('graph1_date_header', 'children'),
+              Input('graph1_date', 'value'))
+def display_value(value):
+    return 'For Vaccine Up to Date: {}'.format(g1_slider_masks[len(g1_slider_masks) - value - 1])
+
+
 @app.callback(
     Output('graph1', 'figure'),
     Input('graph1_radio', 'value'),
     Input('graph1_date', 'value'))
 def update_graph1(selected_criteria, selected_date):
-    idx = jurisdiction['Date'] == g1_slider_masks[selected_date]
+    idx = jurisdiction['Date'] == g1_slider_masks[len(g1_slider_masks) - selected_date - 1]
 
     print(selected_criteria, g1_slider_masks[selected_date])
     if selected_criteria == 'FV':
@@ -242,13 +259,21 @@ def update_county_options(selected_state):
     county_idx = county['Recip_State'] == selected_state
     return [{'label': i, 'value': i} for i in sorted(county.loc[county_idx, 'Recip_County'].unique())]
 
+
+@app.callback(Output('graph2_date_header', 'children'),
+              Input('graph2_date', 'value'))
+def display_value(value):
+    return 'For Vaccine Up to Date: {}'.format(g2_slider_masks[len(g2_slider_masks) - value - 1])
+
+
 @app.callback(
     Output('graph2', 'figure'),
     Input('graph2_state', 'value'),
     Input('graph2_radio', 'value'),
     Input('graph2_date', 'value'))
 def update_graph2(selected_state, selected_criteria, selected_date):
-    idx2 = (county['Recip_State'] == selected_state) & (county['Date'] == g2_slider_masks[selected_date])
+    idx2 = (county['Recip_State'] == selected_state) \
+           & (county['Date'] == g2_slider_masks[len(g2_slider_masks) - selected_date - 1])
 
     if selected_criteria == 'FV':
         color = 'Series_Complete_Pop_Pct'
@@ -268,15 +293,18 @@ def update_graph2(selected_state, selected_criteria, selected_date):
 
     return fig2
 
-# @app.callback(
-#     Output('graph3_date_range', 'masks'),
-#     Input('graph2_state', 'value'),
-#     Input('graph2_county', 'value'))
-# def update_slider(selected_state, selected_county):
-#     slider_idx = (transmission['state_name'] == selected_state) & (transmission['county_name'] == selected_county)
-#     g3_slider_masks = sorted(transmission.loc[slider_idx, 'report_date'])
-#     g3_slider_masks = [d.strftime('%m/%d/%Y') for d in g3_slider_masks]
-#     return [{i: '{}'.format(g3_slider_masks[i]) for i in range(len(g3_slider_masks))}]
+@app.callback(
+    Output('output_container_range_graph3_date_slider', 'children'),
+    Input('graph2_state', 'value'),
+    Input('graph2_county', 'value'))
+def update_slider(selected_state, selected_county):
+    slider_idx = (transmission['state_name'] == selected_state) & (transmission['county_name'] == selected_county)
+    g3_slider_masks = sorted(transmission.loc[slider_idx, 'report_date'])
+    if len(g3_slider_masks) > 0:
+        return '{} - {}'.format(g3_slider_masks[0].strftime('%a %b %d %Y'),
+                                g3_slider_masks[max(0, len(g3_slider_masks) - 1)].strftime('%a %b %d %Y'))
+    else:
+        return ''
 
 @app.callback(
     Output('graph3', 'figure'),
